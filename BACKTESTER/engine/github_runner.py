@@ -61,7 +61,7 @@ def get_git_remote_repo() -> Tuple[str, str]:
         pass
 
     # Default fallback to known repository
-    return "SamratSinghPhysicist", "KCEX_bot"
+    return "SamratSinghPhysicist", "KCEX_BOT_SANDBOX"
 
 
 def resolve_github_token(cli_token: Optional[str] = None) -> Optional[str]:
@@ -238,7 +238,7 @@ class GitHubBacktestRunner:
             "filters_json": json.dumps(filters_dict)
         }
 
-    def dispatch_workflow(self, inputs: Dict[str, str], ref: str = "sandbox") -> bool:
+    def dispatch_workflow(self, inputs: Dict[str, str], ref: str = "main") -> bool:
         """Sends workflow_dispatch trigger to GitHub API."""
         url = f"{self.api_base}/actions/workflows/{self.WORKFLOW_FILENAME}/dispatches"
         payload = {
