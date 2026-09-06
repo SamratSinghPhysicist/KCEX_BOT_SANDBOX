@@ -49,6 +49,24 @@ class BacktestConfig(ExecutionConfig):
     taker_fee_override: Optional[float] = None
     invert_signal: bool = False              # If True, inverts entry direction (Buy -> Sell, Sell -> Buy) for fading strategies
 
+    # Phase V2.1 Microstructure Features
+    # Goal 2: Real-World Maker Order Queue Fill Simulation
+    maker_queue_sim_enabled: bool = False
+    maker_queue_depth_contracts: float = 5000.0   # Estimated resting contracts ahead of limit order in queue
+    maker_queue_timeout_sec: float = 10.0         # Max seconds to wait in queue before order cancellation
+
+    # Goal 3: Micro-Excursion Trailing Stop ("Tick Ratchet")
+    tick_ratchet_enabled: bool = False
+    tick_ratchet_trigger_ticks: float = 1.5       # MFE threshold to activate ratchet tightening
+    tick_ratchet_stall_sec: float = 20.0          # Stalled duration without hitting TP before SL tightens
+    tick_ratchet_tighten_sl_ticks: float = 1.0    # Tighten SL distance to this many ticks (e.g. from 2t to 1t)
+    tick_ratchet_breakeven_trigger_ticks: float = 3.0 # If excursion reaches +3t, move SL to breakeven (0t)
+
+    # Goal 5: Volatility-Adaptive Dynamic Geometry
+    dynamic_atr_geometry_enabled: bool = False
+    dynamic_atr_tp_multiplier: float = 0.8
+    dynamic_atr_sl_multiplier: float = 1.0
+
     # Playback pacing
     # 0.0 = batch processing (as fast as CPU allows)
     # >0.0 = simulated realtime playback speed multiplier (e.g. 10.0 = 10x real-time speed)

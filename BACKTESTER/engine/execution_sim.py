@@ -45,6 +45,7 @@ from BACKTESTER.engine.data_loader import (
     timeframe_to_kcex_interval
 )
 from BACKTESTER.engine.market_sim import BacktestMarket
+from strategies.filters import compute_atr_series
 
 logger = logging.getLogger("BacktestEngine")
 
@@ -322,10 +323,29 @@ class BacktestExecutionEngine:
                             # Check max_trades limit
                             if self.config.max_trades > 0 and self.trade_counter >= self.config.max_trades:
                                 break
+                        else:
+                            # Limit order timed out in queue without fill
+                            self.trade_counter -= 1
+                            if hasattr(self.strategy, "on_trade_rejected"):
+                                self.strategy.on_trade_rejected()
+                            elif hasattr(self.strategy.sub_strategy, "trade_in_progress"):
+                                self.strategy.sub_strategy.trade_in_progress = False
 
                 candle_idx += 1
 
         return self.outcomes
+
+    def _get_current_atr(self, entry_idx: int, all_candles: List[Candle], period: int = 14) -> float:
+        """Calculates 14-period Wilder's ATR up to entry_idx."""
+        start_idx = max(0, entry_idx - 50)
+        subset = all_candles[start_idx : entry_idx + 1]
+        if len(subset) < period:
+            return 0.0
+        highs = [c.high for c in subset]
+        lows = [c.low for c in subset]
+        closes = [c.close for c in subset]
+        atr_series = compute_atr_series(highs, lows, closes, period=period)
+        return atr_series[-1] if atr_series else 0.0
 
     def _execute_simulated_trade(
         self,
@@ -371,12 +391,22 @@ class BacktestExecutionEngine:
         margin_usdt = notional_usdt / leverage if leverage > 0 else notional_usdt
         open_time_sec = entry_candle.close_time_ms / 1000.0
 
-        # 3. Calculate Exact TP & SL
+        # 3. Calculate Exact TP & SL (with optional Dynamic ATR Geometry)
+        calc_tp_ticks = self.config.tp_ticks
+        calc_sl_ticks = self.config.sl_ticks
+        if getattr(self.config, "dynamic_atr_geometry_enabled", False):
+            atr_val = self._get_current_atr(entry_idx, all_candles)
+            if atr_val > 0:
+                atr_ticks = atr_val / pu
+                calc_tp_ticks = max(2, int(round(atr_ticks * getattr(self.config, "dynamic_atr_tp_multiplier", 0.8))))
+                if self.config.sl_mode == "TICKS" or calc_sl_ticks is not None:
+                    calc_sl_ticks = max(2, int(round(atr_ticks * getattr(self.config, "dynamic_atr_sl_multiplier", 1.0))))
+
         exact_tp = self.strategy.calculate_min_profit_tp(
             direction=direction,
             entry_price=entry_price,
             price_unit=pu,
-            tp_ticks=self.config.tp_ticks,
+            tp_ticks=calc_tp_ticks,
             precision=ps
         )
         exact_sl = self.strategy.calculate_stop_loss(
@@ -384,11 +414,59 @@ class BacktestExecutionEngine:
             entry_price=entry_price,
             leverage=leverage,
             sl_roe_pct=self.config.sl_roe_pct,
-            sl_ticks=self.config.sl_ticks,
+            sl_ticks=calc_sl_ticks,
             sl_price_pct=self.config.sl_price_pct,
             price_unit=pu,
             precision=ps
         )
+
+        # 3b. Real-World Maker Order Queue Fill Simulation (Goal 2)
+        if getattr(self.config, "maker_queue_sim_enabled", False):
+            filled = False
+            fill_time_sec = open_time_sec
+            q_depth = float(getattr(self.config, "maker_queue_depth_contracts", 5000.0))
+            q_timeout = float(getattr(self.config, "maker_queue_timeout_sec", 10.0))
+            cum_vol = 0.0
+
+            if self.config.use_tick_data:
+                # Stream ticks from candle close to determine if order gets filled in queue
+                q_stream = self.tick_streamer.stream_ticks(self.symbol, start_ms=entry_candle.close_time_ms)
+                for q_tick in q_stream:
+                    t_sec = q_tick.timestamp_ms / 1000.0
+                    if (t_sec - open_time_sec) > q_timeout:
+                        break
+                    if direction == OrderDirection.LONG:
+                        if q_tick.price <= entry_price:
+                            cum_vol += q_tick.qty
+                            if cum_vol >= q_depth:
+                                filled = True
+                                fill_time_sec = t_sec
+                                break
+                    else:
+                        if q_tick.price >= entry_price:
+                            cum_vol += q_tick.qty
+                            if cum_vol >= q_depth:
+                                filled = True
+                                fill_time_sec = t_sec
+                                break
+            else:
+                # Candle fallback for queue fill: next candle must trade through entry_price
+                if entry_idx + 1 < len(all_candles):
+                    next_c = all_candles[entry_idx + 1]
+                    if direction == OrderDirection.LONG:
+                        if next_c.low < entry_price or (next_c.low == entry_price and next_c.volume >= q_depth):
+                            filled = True
+                            fill_time_sec = next_c.open_time_ms / 1000.0
+                    else:
+                        if next_c.high > entry_price or (next_c.high == entry_price and next_c.volume >= q_depth):
+                            filled = True
+                            fill_time_sec = next_c.open_time_ms / 1000.0
+
+            if not filled:
+                # Order timed out in queue without filling
+                return None, entry_idx
+
+            open_time_sec = fill_time_sec
 
         exit_price = entry_price
         exit_reason = ExitReason.UNKNOWN
@@ -402,13 +480,39 @@ class BacktestExecutionEngine:
             exit_time_sec = open_time_sec + 0.1
         else:
             # 5. Active Position Monitoring
-            entry_ms = entry_candle.close_time_ms
+            entry_ms = int(open_time_sec * 1000)
 
             # Attempt High-Fidelity Tick Stream Monitoring if enabled
             hit_via_ticks = False
+            mfe_ticks = 0.0
+            ratchet_tightened = False
+            ratchet_be_moved = False
+
             if self.config.use_tick_data:
                 tick_gen = self.tick_streamer.stream_ticks(self.symbol, start_ms=entry_ms)
                 for tick in tick_gen:
+                    # Micro-Excursion Trailing Stop ("Tick Ratchet")
+                    if getattr(self.config, "tick_ratchet_enabled", False):
+                        elapsed_s = (tick.timestamp_ms / 1000.0) - open_time_sec
+                        if direction == OrderDirection.LONG:
+                            mfe_ticks = max(mfe_ticks, (tick.price - entry_price) / pu)
+                            if not ratchet_tightened and mfe_ticks >= getattr(self.config, "tick_ratchet_trigger_ticks", 1.5) and elapsed_s >= getattr(self.config, "tick_ratchet_stall_sec", 20.0):
+                                tighten_dist = getattr(self.config, "tick_ratchet_tighten_sl_ticks", 1.0)
+                                exact_sl = max(exact_sl, round(entry_price - tighten_dist * pu, ps))
+                                ratchet_tightened = True
+                            if not ratchet_be_moved and mfe_ticks >= getattr(self.config, "tick_ratchet_breakeven_trigger_ticks", 3.0):
+                                exact_sl = max(exact_sl, entry_price)
+                                ratchet_be_moved = True
+                        else:
+                            mfe_ticks = max(mfe_ticks, (entry_price - tick.price) / pu)
+                            if not ratchet_tightened and mfe_ticks >= getattr(self.config, "tick_ratchet_trigger_ticks", 1.5) and elapsed_s >= getattr(self.config, "tick_ratchet_stall_sec", 20.0):
+                                tighten_dist = getattr(self.config, "tick_ratchet_tighten_sl_ticks", 1.0)
+                                exact_sl = min(exact_sl, round(entry_price + tighten_dist * pu, ps))
+                                ratchet_tightened = True
+                            if not ratchet_be_moved and mfe_ticks >= getattr(self.config, "tick_ratchet_breakeven_trigger_ticks", 3.0):
+                                exact_sl = min(exact_sl, entry_price)
+                                ratchet_be_moved = True
+
                     if direction == OrderDirection.LONG:
                         # TP hit
                         if tick.price >= exact_tp:
@@ -420,7 +524,7 @@ class BacktestExecutionEngine:
                         # SL hit
                         elif tick.price <= exact_sl:
                             exit_price = exact_sl
-                            exit_reason = ExitReason.STOP_LOSS_HIT
+                            exit_reason = ExitReason.TICK_RATCHET_SL if ratchet_tightened else ExitReason.STOP_LOSS_HIT
                             exit_time_sec = tick.timestamp_ms / 1000.0
                             hit_via_ticks = True
                             break
@@ -435,7 +539,7 @@ class BacktestExecutionEngine:
                         # SL hit
                         elif tick.price >= exact_sl:
                             exit_price = exact_sl
-                            exit_reason = ExitReason.STOP_LOSS_HIT
+                            exit_reason = ExitReason.TICK_RATCHET_SL if ratchet_tightened else ExitReason.STOP_LOSS_HIT
                             exit_time_sec = tick.timestamp_ms / 1000.0
                             hit_via_ticks = True
                             break
@@ -484,6 +588,28 @@ class BacktestExecutionEngine:
             if not hit_via_ticks and self.config.tick_fallback_to_candle:
                 for idx in range(entry_idx + 1, len(all_candles)):
                     c = all_candles[idx]
+                    # Candle Ratchet Monitoring
+                    if getattr(self.config, "tick_ratchet_enabled", False):
+                        elapsed_s = (c.close_time_ms / 1000.0) - open_time_sec
+                        if direction == OrderDirection.LONG:
+                            mfe_ticks = max(mfe_ticks, (c.high - entry_price) / pu)
+                            if not ratchet_tightened and mfe_ticks >= getattr(self.config, "tick_ratchet_trigger_ticks", 1.5) and elapsed_s >= getattr(self.config, "tick_ratchet_stall_sec", 20.0):
+                                tighten_dist = getattr(self.config, "tick_ratchet_tighten_sl_ticks", 1.0)
+                                exact_sl = max(exact_sl, round(entry_price - tighten_dist * pu, ps))
+                                ratchet_tightened = True
+                            if not ratchet_be_moved and mfe_ticks >= getattr(self.config, "tick_ratchet_breakeven_trigger_ticks", 3.0):
+                                exact_sl = max(exact_sl, entry_price)
+                                ratchet_be_moved = True
+                        else:
+                            mfe_ticks = max(mfe_ticks, (entry_price - c.low) / pu)
+                            if not ratchet_tightened and mfe_ticks >= getattr(self.config, "tick_ratchet_trigger_ticks", 1.5) and elapsed_s >= getattr(self.config, "tick_ratchet_stall_sec", 20.0):
+                                tighten_dist = getattr(self.config, "tick_ratchet_tighten_sl_ticks", 1.0)
+                                exact_sl = min(exact_sl, round(entry_price + tighten_dist * pu, ps))
+                                ratchet_tightened = True
+                            if not ratchet_be_moved and mfe_ticks >= getattr(self.config, "tick_ratchet_breakeven_trigger_ticks", 3.0):
+                                exact_sl = min(exact_sl, entry_price)
+                                ratchet_be_moved = True
+
                     if direction == OrderDirection.LONG:
                         if c.high >= exact_tp:
                             exit_price = exact_tp
@@ -493,7 +619,7 @@ class BacktestExecutionEngine:
                             break
                         elif c.low <= exact_sl:
                             exit_price = exact_sl
-                            exit_reason = ExitReason.STOP_LOSS_HIT
+                            exit_reason = ExitReason.TICK_RATCHET_SL if ratchet_tightened else ExitReason.STOP_LOSS_HIT
                             exit_time_sec = c.close_time_ms / 1000.0
                             exit_candle_idx = idx
                             break
@@ -506,7 +632,7 @@ class BacktestExecutionEngine:
                             break
                         elif c.high >= exact_sl:
                             exit_price = exact_sl
-                            exit_reason = ExitReason.STOP_LOSS_HIT
+                            exit_reason = ExitReason.TICK_RATCHET_SL if ratchet_tightened else ExitReason.STOP_LOSS_HIT
                             exit_time_sec = c.close_time_ms / 1000.0
                             exit_candle_idx = idx
                             break

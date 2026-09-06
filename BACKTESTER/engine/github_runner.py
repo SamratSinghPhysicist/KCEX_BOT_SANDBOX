@@ -199,7 +199,18 @@ class GitHubBacktestRunner:
             "htf_timeframe": getattr(config, "htf_timeframe", "15m") or "15m",
             "hourly_filter": getattr(config, "hourly_filter_enabled", False),
             "hourly_blacklist": ",".join(str(x) for x in (getattr(config, "hourly_blacklist_utc", []) or [])),
-            "direction_bias": getattr(config, "direction_bias", "BOTH") or "BOTH"
+            "direction_bias": getattr(config, "direction_bias", "BOTH") or "BOTH",
+            "maker_queue_sim_enabled": getattr(config, "maker_queue_sim_enabled", False),
+            "maker_queue_depth_contracts": getattr(config, "maker_queue_depth_contracts", 5000.0),
+            "maker_queue_timeout_sec": getattr(config, "maker_queue_timeout_sec", 10.0),
+            "tick_ratchet_enabled": getattr(config, "tick_ratchet_enabled", False),
+            "tick_ratchet_trigger_ticks": getattr(config, "tick_ratchet_trigger_ticks", 1.5),
+            "tick_ratchet_stall_sec": getattr(config, "tick_ratchet_stall_sec", 20.0),
+            "tick_ratchet_tighten_sl_ticks": getattr(config, "tick_ratchet_tighten_sl_ticks", 1.0),
+            "tick_ratchet_breakeven_trigger_ticks": getattr(config, "tick_ratchet_breakeven_trigger_ticks", 3.0),
+            "dynamic_atr_geometry_enabled": getattr(config, "dynamic_atr_geometry_enabled", False),
+            "dynamic_atr_tp_multiplier": getattr(config, "dynamic_atr_tp_multiplier", 0.8),
+            "dynamic_atr_sl_multiplier": getattr(config, "dynamic_atr_sl_multiplier", 1.0)
         }
 
         strat = config.strategy_mode.upper() if config.strategy_mode else "STOCH_RSI"

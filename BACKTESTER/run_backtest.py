@@ -426,6 +426,18 @@ def main():
     parser.add_argument("--direction-bias", type=str, default="BOTH", choices=["BOTH", "LONG_ONLY", "SHORT_ONLY"], help="Directional bias: BOTH, LONG_ONLY, or SHORT_ONLY")
     parser.add_argument("--invert-signal", action="store_true", default=False, help="Invert signal direction (Sell on Buy, Buy on Sell) for fading strategies")
     parser.add_argument("--filters-json", type=str, default=None, help="JSON string containing Trade Optimization and Regime Filter configurations")
+    # Phase V2.1 Microstructure Features
+    parser.add_argument("--maker-queue-sim", action="store_true", default=False, help="Enable maker order queue fill simulation")
+    parser.add_argument("--maker-queue-depth", type=float, default=5000.0, help="Estimated resting queue depth in contracts ahead of maker order (default: 5000.0)")
+    parser.add_argument("--maker-queue-timeout", type=float, default=10.0, help="Maximum seconds to wait in queue before cancellation (default: 10.0)")
+    parser.add_argument("--tick-ratchet", action="store_true", default=False, help="Enable micro-excursion trailing stop (Tick Ratchet)")
+    parser.add_argument("--tick-ratchet-trigger", type=float, default=1.5, help="MFE trigger ticks to engage ratchet (default: 1.5)")
+    parser.add_argument("--tick-ratchet-stall", type=float, default=20.0, help="Stall duration in seconds before tightening SL (default: 20.0)")
+    parser.add_argument("--tick-ratchet-tighten-sl", type=float, default=1.0, help="Tightened SL distance in ticks (default: 1.0)")
+    parser.add_argument("--tick-ratchet-breakeven", type=float, default=3.0, help="MFE trigger ticks to move SL to breakeven (default: 3.0)")
+    parser.add_argument("--dynamic-atr", action="store_true", default=False, help="Enable volatility-adaptive dynamic ATR geometry")
+    parser.add_argument("--dynamic-atr-tp", type=float, default=0.8, help="ATR TP multiplier (default: 0.8)")
+    parser.add_argument("--dynamic-atr-sl", type=float, default=1.0, help="ATR SL multiplier (default: 1.0)")
 
     args = parser.parse_args()
     print_banner()
@@ -478,6 +490,20 @@ def main():
         hourly_bl = [int(x.strip()) for x in args.hourly_blacklist.split(",") if x.strip().isdigit()] if args.hourly_blacklist else []
         dir_bias = args.direction_bias
 
+        maker_queue_enabled = args.maker_queue_sim
+        maker_queue_depth = args.maker_queue_depth
+        maker_queue_timeout = args.maker_queue_timeout
+
+        tick_ratchet_enabled = args.tick_ratchet
+        tick_ratchet_trigger = args.tick_ratchet_trigger
+        tick_ratchet_stall = args.tick_ratchet_stall
+        tick_ratchet_tighten_sl = args.tick_ratchet_tighten_sl
+        tick_ratchet_be = args.tick_ratchet_breakeven
+
+        dynamic_atr_enabled = args.dynamic_atr
+        dynamic_atr_tp_mult = args.dynamic_atr_tp
+        dynamic_atr_sl_mult = args.dynamic_atr_sl
+
         if args.filters_json:
             try:
                 fj = json.loads(args.filters_json) if isinstance(args.filters_json, str) else args.filters_json
@@ -499,6 +525,17 @@ def main():
                     elif isinstance(bl_val, str) and bl_val.strip():
                         hourly_bl = [int(x.strip()) for x in bl_val.split(",") if x.strip().isdigit()]
                 if "direction_bias" in fj: dir_bias = str(fj["direction_bias"])
+                if "maker_queue_sim_enabled" in fj: maker_queue_enabled = bool(fj["maker_queue_sim_enabled"])
+                if "maker_queue_depth_contracts" in fj: maker_queue_depth = float(fj["maker_queue_depth_contracts"])
+                if "maker_queue_timeout_sec" in fj: maker_queue_timeout = float(fj["maker_queue_timeout_sec"])
+                if "tick_ratchet_enabled" in fj: tick_ratchet_enabled = bool(fj["tick_ratchet_enabled"])
+                if "tick_ratchet_trigger_ticks" in fj: tick_ratchet_trigger = float(fj["tick_ratchet_trigger_ticks"])
+                if "tick_ratchet_stall_sec" in fj: tick_ratchet_stall = float(fj["tick_ratchet_stall_sec"])
+                if "tick_ratchet_tighten_sl_ticks" in fj: tick_ratchet_tighten_sl = float(fj["tick_ratchet_tighten_sl_ticks"])
+                if "tick_ratchet_breakeven_trigger_ticks" in fj: tick_ratchet_be = float(fj["tick_ratchet_breakeven_trigger_ticks"])
+                if "dynamic_atr_geometry_enabled" in fj: dynamic_atr_enabled = bool(fj["dynamic_atr_geometry_enabled"])
+                if "dynamic_atr_tp_multiplier" in fj: dynamic_atr_tp_mult = float(fj["dynamic_atr_tp_multiplier"])
+                if "dynamic_atr_sl_multiplier" in fj: dynamic_atr_sl_mult = float(fj["dynamic_atr_sl_multiplier"])
             except Exception as e:
                 print(f"[!] Warning: Failed to parse --filters-json: {e}")
 
@@ -552,7 +589,18 @@ def main():
             hourly_filter_enabled=hourly_enabled,
             hourly_blacklist_utc=hourly_bl,
             direction_bias=dir_bias,
-            invert_signal=args.invert_signal
+            invert_signal=args.invert_signal,
+            maker_queue_sim_enabled=maker_queue_enabled,
+            maker_queue_depth_contracts=maker_queue_depth,
+            maker_queue_timeout_sec=maker_queue_timeout,
+            tick_ratchet_enabled=tick_ratchet_enabled,
+            tick_ratchet_trigger_ticks=tick_ratchet_trigger,
+            tick_ratchet_stall_sec=tick_ratchet_stall,
+            tick_ratchet_tighten_sl_ticks=tick_ratchet_tighten_sl,
+            tick_ratchet_breakeven_trigger_ticks=tick_ratchet_be,
+            dynamic_atr_geometry_enabled=dynamic_atr_enabled,
+            dynamic_atr_tp_multiplier=dynamic_atr_tp_mult,
+            dynamic_atr_sl_multiplier=dynamic_atr_sl_mult
         )
 
     # Dispatch to appropriate execution target
