@@ -2,12 +2,12 @@
 __pycache__/
 *.py[cod]
 *$py.class
+
+# C extensions
 *.so
 
-# Environment & Credentials
+
 .env
-.env.*
-!.env.example
 
 # Virtual environments
 venv/
@@ -16,10 +16,11 @@ ENV/
 .venv/
 
 # KCEX Engine Logs & Run Artifacts
-logs/
-**/logs/
-*.log
-*.tmp
+logs/test/
+logs/test_engine/
+logs/*.log
+logs/*.txt
+logs/*.jsonl
 
 # IDE & Editor files
 .vscode/
@@ -32,9 +33,10 @@ logs/
 .coverage
 htmlcov/
 
-# Backtester Large Historical Data Dumps (Binance CSV/ZIP downloads)
-**/BACKTESTER/Historical_Trades_Data_Binance/
-**/BACKTESTER/OHLCV_Data_Binance/
 
-# Reports gitkeep
-!**/BACKTESTER/reports/.gitkeep
+# Backtester Data & Output Artifacts
+BACKTESTER/Historical_Trades_Data_Binance/
+BACKTESTER/OHLCV_Data_Binance/
+BACKTESTER/reports/*
+!BACKTESTER/reports/.gitkeep
+

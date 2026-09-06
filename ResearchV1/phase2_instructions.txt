@@ -1,0 +1,974 @@
+<USER_REQUEST>
+# PHASE 2: VALIDATE AND TRY TO BREAK THE BEST DISCOVERY
+
+You have completed the first autonomous research program.
+
+The previous research identified a candidate configuration:
+
+```text
+Strategy: STOCH_RSI FAST_SCALP
+Direction: BOTH
+TP: +2 ticks
+SL: -5 ticks
+Filters: NONE
+```
+
+The previous research claims this is sufficiently promising for paper trading.
+
+**DO NOT accept that conclusion yet.**
+
+Your job in this phase is to act as a highly skeptical independent validation team.
+
+The objective is:
+
+> Determine whether the apparent `SL = 5 ticks` advantage is a real, robust effect or simply an artifact of the historical sample, implementation, market regime, or research process.
+
+You have full autonomy to inspect the previous research, reproduce results, create new tests, modify research code, run backtests, and design additional validation experiments.
+
+Do not optimize for producing a positive conclusion.
+
+A conclusion of:
+
+```text
+RESULT HOLDS
+```
+
+is acceptable.
+
+A conclusion of:
+
+```text
+RESULT DOES NOT HOLD
+```
+
+is equally acceptable.
+
+A conclusion of:
+
+```text
+RESULT IS UNCERTAIN
+```
+
+is also acceptable.
+
+---
+
+# 1. READ THE PREVIOUS RESEARCH FIRST
+
+Before running new experiments, inspect:
+
+```text
+research_agent_output/
+```
+
+Read:
+
+```text
+01_FINAL_SUMMARY.md
+02_DETAILED_RESEARCH_REPORT.md
+03_EXPERIMENT_LEDGER.csv
+04_CODE_CHANGES.md
+05_FINAL_COMPARISON.md
+06_REPRODUCTION_GUIDE.md
+```
+
+Also inspect the exact code/configuration changes responsible for the claimed `SL = 5` discovery.
+
+Reconstruct:
+
+```text
+How was 5 ticks discovered?
+Which periods were used?
+Which periods were seen during discovery?
+Which periods were truly untouched?
+How many experiments contributed to the conclusion?
+Were thresholds/parameters repeatedly adjusted after seeing results?
+Which datasets overlap?
+```
+
+Do not assume the previous research's terminology or conclusions are automatically correct.
+
+---
+
+# 2. REPRODUCE THE CLAIM
+
+First reproduce the key `SL = 5` result.
+
+Verify:
+
+```text
+TP = +2
+SL = -5
+```
+
+against the exact baseline configuration.
+
+Confirm:
+
+* trade count
+* win rate
+* average win
+* average loss
+* profit factor
+* net PnL
+* maximum drawdown
+* duration
+* directional statistics
+
+Confirm the result using raw outputs rather than trusting the previous report alone.
+
+If you cannot reproduce it, investigate why.
+
+---
+
+# 3. IDENTIFY THE TRUE OUT-OF-SAMPLE DATA
+
+Determine exactly which data was used during discovery.
+
+Then define a genuinely untouched validation/test period.
+
+Once this period is designated as the final test:
+
+**DO NOT use its results to tune parameters.**
+
+Do not change:
+
+* SL
+* TP
+* strategy parameters
+* filters
+* direction
+* thresholds
+
+based on final-test performance and then call it out-of-sample again.
+
+---
+
+# 4. RE-TEST THE ENTIRE SL CURVE
+
+Do not only test 5 ticks.
+
+Run a systematic comparison:
+
+```text
+SL = 1
+SL = 2
+SL = 3
+SL = 4
+SL = 5
+SL = 6
+SL = 7
+SL = 8
+SL = 9
+SL = 10
+SL = 11
+SL = 12
+SL = 13
+SL = 14
+SL = 15
+```
+
+with:
+
+```text
+TP = +2 ticks
+```
+
+held constant.
+
+Produce:
+
+```text
+SL
+win rate
+average win
+average loss
+profit factor
+net PnL
+max drawdown
+PnL/trade
+loss count
+trade count
+```
+
+for every stop.
+
+Then plot the full curve.
+
+The purpose is to determine whether:
+
+```text
+SL = 5
+```
+
+is:
+
+### A sharp isolated optimum
+
+or:
+
+### Part of a broad stable region
+
+For example:
+
+```text
+4 = strong
+5 = strong
+6 = strong
+7 = strong
+```
+
+is more encouraging than:
+
+```text
+4 = mediocre
+5 = spectacular
+6 = mediocre
+```
+
+---
+
+# 5. TEST SMALL NEIGHBORHOODS AROUND THE OPTIMUM
+
+If 5 remains strongest, test nearby values more aggressively:
+
+```text
+4.0
+4.25
+4.5
+4.75
+5.0
+5.25
+5.5
+5.75
+6.0
+```
+
+ONLY if the exchange/backtester supports sufficiently precise stop placement.
+
+If actual execution only permits integer ticks, do not invent fractional tick execution.
+
+The objective is to determine sensitivity.
+
+---
+
+# 6. TEST ACROSS TIME
+
+Break the historical period into independent segments.
+
+For example:
+
+```text
+January
+February
+March
+April
+May
+June
+July
+August
+```
+
+and possibly:
+
+```text
+weekly
+```
+
+where sample size permits.
+
+For each period compare:
+
+```text
+SL = 2
+SL = 3
+SL = 4
+SL = 5
+SL = 6
+SL = 7
+SL = 10
+```
+
+The key question:
+
+> Does 5 ticks consistently outperform nearby alternatives, or did one period dominate the full-period result?
+
+---
+
+# 7. TEST DIFFERENT MARKET REGIMES
+
+Investigate whether the 5-tick effect survives across:
+
+```text
+high volatility
+low volatility
+
+strong trend
+weak trend
+
+high volume
+low volume
+
+large price movement
+small price movement
+
+different hours
+different days
+```
+
+Do not assume existing indicators are the correct regime definitions.
+
+Use both existing strategy variables and raw market/tick characteristics where useful.
+
+---
+
+# 8. TEST BOTH DIRECTIONS SEPARATELY
+
+Run:
+
+```text
+LONG_ONLY
+SHORT_ONLY
+BOTH
+```
+
+Compare the SL curve for each.
+
+Determine whether:
+
+```text
+SL = 5
+```
+
+works because of:
+
+```text
+both directions
+LONG specifically
+SHORT specifically
+```
+
+Do not combine them blindly.
+
+---
+
+# 9. TEST MULTIPLE STRATEGIES
+
+The current discovery concerns STOCH_RSI.
+
+Test whether the same stop-distance behavior appears in:
+
+```text
+STOCH_RSI
+EMA_CROSSOVER
+```
+
+and any additional mature strategies already present in the codebase.
+
+Do not assume the same optimal stop applies to every strategy.
+
+The research question is:
+
+> Is 5 ticks a property of this strategy, this market, or the trading system's general execution geometry?
+
+---
+
+# 10. TEST MULTIPLE PAIRS
+
+The current research focuses on TRUMP.
+
+Test at least:
+
+```text
+TRUMP_USDT
+DOGE_USDT
+```
+
+and other pairs only when sufficient high-quality data exists.
+
+For each pair, independently examine:
+
+```text
+optimal SL
+performance curve
+stability
+```
+
+Do not force the result to be identical.
+
+A useful conclusion could be:
+
+```text
+TRUMP prefers 5
+DOGE prefers 4
+```
+
+which would indicate pair-specific behavior.
+
+Another useful conclusion could be:
+
+```text
+Both behave similarly
+```
+
+which would suggest a more general effect.
+
+---
+
+# 11. DISTINGUISH PRICE GEOMETRY FROM STRATEGY EDGE
+
+This is particularly important.
+
+The earlier research showed that:
+
+```text
+TP = +2
+SL = -2
+```
+
+produces approximately 50/50 outcomes.
+
+Investigate the transition:
+
+```text
+SL = 2
+SL = 3
+SL = 4
+SL = 5
+...
+```
+
+as a **conditional probability curve**.
+
+Measure:
+
+$$
+P(+2\text{ ticks before }-N\text{ ticks})
+$$
+
+as \(N\) changes.
+
+The objective is to understand whether the apparent edge emerges because:
+
+* the strategy has genuine directional information
+* the price path has asymmetric behavior
+* the market tends to recover after adverse movement
+* the stop geometry is interacting with typical volatility
+* execution mechanics create an apparent optimum
+
+Do not confuse these explanations.
+
+---
+
+# 12. PER-TRADE PATH ANALYSIS
+
+Use tick-level data where available.
+
+For each SL value, investigate:
+
+```text
+MFE
+MAE
+time to TP
+time to SL
+maximum adverse excursion before eventual TP
+```
+
+Especially analyze trades that:
+
+```text
+would lose at SL=2
+but win at SL=5
+```
+
+and:
+
+```text
+would win at SL=5
+but lose at SL=6+
+```
+
+This should explain what the stop distance is actually doing.
+
+---
+
+# 13. COUNTERFACTUAL TRADE MATRIX
+
+Construct a per-entry matrix.
+
+For every strategy signal, determine what would happen under:
+
+```text
+SL=2
+SL=3
+SL=4
+SL=5
+SL=6
+SL=7
+SL=10
+```
+
+using the **same historical market path**.
+
+Then classify each opportunity:
+
+```text
+wins under all
+loses under all
+saved by wider stop
+destroyed by wider stop
+```
+
+This is extremely important.
+
+It allows you to answer:
+
+> Where exactly does the additional PnL from SL=5 come from?
+
+---
+
+# 14. INVESTIGATE THE "SAVED LOSER" POPULATION
+
+Analyze trades where:
+
+```text
+SL=2 → loss
+SL=5 → win
+```
+
+What did these trades look like?
+
+Look at:
+
+* pre-entry conditions
+* initial adverse excursion
+* recovery time
+* maximum adverse excursion
+* volatility
+* strategy state
+* market regime
+* tick path
+
+Then compare them against:
+
+```text
+SL=2 → loss
+SL=5 → loss
+```
+
+This may reveal a deeper market phenomenon.
+
+---
+
+# 15. INVESTIGATE THE "EXTRA DAMAGE" POPULATION
+
+Also analyze trades where:
+
+```text
+SL=5 → loss
+```
+
+especially those that:
+
+```text
+SL=2 → loss
+SL=5 → loss
+```
+
+and those that:
+
+```text
+SL=5 → loss
+SL=10 → win
+```
+
+The latter group tells us what we sacrifice by choosing 5 instead of a wider stop.
+
+The objective is not merely to maximize the final PnL number.
+
+---
+
+# 16. TEST RANDOMIZED / NULL BENCHMARKS
+
+Where statistically appropriate, construct null comparisons.
+
+For example:
+
+* randomized signal timing preserving trade frequency
+* shuffled labels where appropriate
+* direction-neutral benchmarks
+* random-entry controls with the same TP/SL geometry
+
+The purpose is to estimate how much of the observed effect could arise without genuine strategy information.
+
+Do this carefully and document assumptions.
+
+---
+
+# 17. TEST FOR MULTIPLE-TESTING BIAS
+
+The first research program conducted many experiments.
+
+Therefore investigate:
+
+> Is the 5-tick result simply the best-looking result among a large number of tested possibilities?
+
+Document:
+
+```text total experiments considered
+number of SL values tested
+number of strategy variants
+number of filters
+number of parameter combinations
+```
+
+The more hypotheses searched, the more skeptical we should be of an isolated optimum.
+
+Do not use a p-value mechanically to declare victory.
+
+---
+
+# 18. BOOTSTRAP / RESAMPLING ANALYSIS
+
+Where appropriate, estimate uncertainty around the candidate's performance.
+
+Use methods appropriate for temporally dependent trading data.
+
+Avoid naive iid assumptions when they are inappropriate.
+
+Estimate things such as:
+
+```text confidence/uncertainty interval for PnL
+distribution of cumulative PnL
+probability of underperforming baseline
+```
+
+The goal is to understand how fragile the result is.
+
+---
+
+# 19. TEST CAPITAL SCALE EFFECTS
+
+The previous tests use very small starting capital.
+
+Separate:
+
+```text trade-level economics
+```
+
+from:
+
+```text compounded account behavior
+```
+
+Analyze results independently of the unusually small starting balance where appropriate.
+
+Do not let absurd percentage ROI caused by tiny starting capital dominate conclusions.
+
+---
+
+# 20. EXECUTION-REALISM CHECK
+
+Verify the candidate against realistic execution assumptions.
+
+Where supported, test:
+
+```text zero slippage
+small slippage
+larger slippage
+```
+
+and any realistic execution delays available in the simulator.
+
+The candidate should not depend entirely on idealized fills.
+
+If the environment genuinely has zero fees, preserve that assumption.
+
+Do not invent fees.
+
+---
+
+# 21. LIVE-LOG CROSS-CHECK
+
+The repository contains live logs from TRUMP trading.
+
+Use them only as a **post-hoc observational sanity check**, not as a tuning dataset.
+
+Compare:
+
+```text historical model behavior
+vs
+observed live trade behavior
+```
+
+Look for consistency in:
+
+* trade duration
+* stop behavior
+* TP behavior
+* adverse excursion
+* direction
+* market conditions
+
+Do not modify the candidate based on a tiny live sample.
+
+---
+
+# 22. NO CHERRY-PICKING
+
+If 5 ticks fails on a period, report it.
+
+If 5 ticks works only on TRUMP, report it.
+
+If 5 ticks works only for LONG, report it.
+
+If 5 ticks is not statistically distinguishable from 4 or 6, report that.
+
+Do not manufacture certainty.
+
+---
+
+# 23. SEARCH FOR A BETTER EXPLANATION
+
+If the 5-tick result survives, ask:
+
+> Why?
+
+Do not stop at:
+
+```text SL=5 has the highest PnL.
+```
+
+Investigate whether the real phenomenon is something like:
+
+```text strategy signal survives small adverse movement
+```
+
+or:
+
+```text typical market noise is approximately N ticks
+```
+
+or:
+
+```text certain market regimes require wider stops
+```
+
+or:
+
+```text the optimal stop is related to normalized volatility
+```
+
+This could lead to a more powerful rule than a fixed 5-tick stop.
+
+For example, investigate whether a normalized relationship such as:
+
+```text stop distance / ATR
+```
+
+or another market-state measure explains the result.
+
+Do NOT implement such a rule unless the data supports it.
+
+---
+
+# 24. SEARCH FOR DYNAMIC STOP LOGIC
+
+Only if the evidence justifies it, investigate whether a fixed 5-tick SL is merely a crude approximation of a dynamic phenomenon.
+
+Potential research:
+
+```text low volatility → smaller SL
+high volatility → larger SL
+```
+
+or:
+
+```text strong signal → smaller SL
+weak signal → different SL
+```
+
+or:
+
+```text market regime → different stop
+```
+
+But treat every additional degree of freedom as an overfitting risk.
+
+Start with the fixed 5-tick baseline.
+
+---
+
+# 25. DO NOT DESTROY THE CURRENT CANDIDATE WHILE RESEARCHING
+
+Preserve a reproducible version of:
+
+```text STOCH_RSI FAST_SCALP
+TP=2
+SL=5
+BOTH
+ZERO FILTERS
+```
+
+Do not permanently modify the baseline code just because a research experiment uses a different configuration.
+
+Research variants must remain identifiable.
+
+---
+
+# 26. FINAL DECISION FRAMEWORK
+
+At the end, classify the 5-tick result into exactly one:
+
+### VERIFIED
+
+The effect survives untouched out-of-sample data, neighboring parameters, time periods, and relevant robustness tests.
+
+### PROMISING
+
+The effect appears strong but more validation is required.
+
+### FRAGILE
+
+The effect works but is highly sensitive to period, pair, direction, or parameters.
+
+### REJECTED
+
+The effect does not survive proper validation.
+
+### INCONCLUSIVE
+
+Evidence is insufficient.
+
+Do not use "DEPLOYABLE FOR PAPER TRADING" unless the evidence genuinely supports it.
+
+---
+
+# 27. FINAL OUTPUT
+
+Create:
+
+```text
+research_agent_phase2/
+```
+
+with:
+
+```text
+01_VALIDATION_SUMMARY.md
+02_DETAILED_VALIDATION_REPORT.md
+03_SL_SWEEP_RESULTS.csv
+04_TIME_SEGMENT_RESULTS.csv
+05_PAIR_RESULTS.csv
+06_DIRECTION_RESULTS.csv
+07_COUNTERFACTUAL_MATRIX.csv
+08_ROBUSTNESS_RESULTS.csv
+09_CODE_CHANGES.md
+10_REPRODUCTION_GUIDE.md
+```
+
+---
+
+# 28. VALIDATION SUMMARY
+
+`01_VALIDATION_SUMMARY.md` must answer:
+
+```text
+Did SL=5 survive?
+YES / NO / UNCERTAIN
+
+Where did it work?
+
+Where did it fail?
+
+How stable is the optimum?
+
+Does the effect generalize across time?
+
+Does it generalize across pairs?
+
+Does it generalize across direction?
+
+What is the strongest evidence?
+
+What is the strongest counter-evidence?
+
+What remains unexplained?
+
+Final recommendation:
+```
+
+---
+
+# 29. FINAL COMPARISON
+
+Provide a clean table:
+
+```text
+Configuration        Net PnL   PF   Win Rate   Max DD   Trades
+Baseline             ...
+SL=2                 ...
+SL=3                 ...
+SL=4                 ...
+SL=5                 ...
+SL=6                 ...
+SL=7                 ...
+SL=10                ...
+```
+
+for both:
+
+```text discovery period
+```
+
+and:
+
+```text untouched validation period
+```
+
+where applicable.
+
+---
+
+# 30. FINAL RESEARCH QUESTION
+
+Your ultimate task is to answer:
+
+> **Is SL=5 genuinely exposing a robust property of the strategy/market, or did the first autonomous research program merely discover the most attractive historical parameter?**
+
+And if it IS robust:
+
+> **What underlying market behavior appears to explain why 5 ticks works?**
+
+That explanation is more valuable than the parameter itself.
+
+---
+
+# 31. STOP CONDITION
+
+Do not continue generating experiments indefinitely.
+
+Stop when:
+
+* the candidate is convincingly validated,
+* or convincingly rejected,
+* or the remaining uncertainty cannot reasonably be reduced with the available data.
+
+The final report should make clear why you stopped.
+
+# BEGIN
+
+Start by reading and reconstructing the previous research.
+
+Then independently reproduce the `SL=5` finding.
+
+Then try very hard to break it.
+
+
+
+
+DON'T STOP KEEP GOING
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-06T14:08:11+05:30.
+</ADDITIONAL_METADATA>
