@@ -210,7 +210,8 @@ class GitHubBacktestRunner:
             "tick_ratchet_breakeven_trigger_ticks": getattr(config, "tick_ratchet_breakeven_trigger_ticks", 3.0),
             "dynamic_atr_geometry_enabled": getattr(config, "dynamic_atr_geometry_enabled", False),
             "dynamic_atr_tp_multiplier": getattr(config, "dynamic_atr_tp_multiplier", 0.8),
-            "dynamic_atr_sl_multiplier": getattr(config, "dynamic_atr_sl_multiplier", 1.0)
+            "dynamic_atr_sl_multiplier": getattr(config, "dynamic_atr_sl_multiplier", 1.0),
+            "exit_slippage_ticks": getattr(config, "exit_slippage_ticks", None) if getattr(config, "exit_slippage_ticks", None) is not None else config.slippage_ticks
         }
 
         strat = config.strategy_mode.upper() if config.strategy_mode else "STOCH_RSI"

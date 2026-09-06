@@ -43,7 +43,8 @@ class BacktestConfig(ExecutionConfig):
     # High-fidelity Simulation Options
     use_tick_data: bool = True               # Stream tick-by-tick trades when available for active trades
     tick_fallback_to_candle: bool = True     # Use candle high/low if tick trade file is missing for a slice
-    slippage_ticks: int = 0                  # Additional adverse fill slippage in ticks
+    slippage_ticks: int = 0                  # Additional adverse fill slippage on entry in ticks
+    exit_slippage_ticks: Optional[int] = None # Adverse slippage on market stop-loss exits in ticks (defaults to slippage_ticks)
     fee_mode: str = "LIVE"                   # "LIVE", "ZERO", or "MANUAL"
     maker_fee_override: Optional[float] = None
     taker_fee_override: Optional[float] = None

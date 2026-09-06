@@ -370,6 +370,11 @@ class BacktestExecutionEngine:
         # Entry happens at candle close (or next bar open)
         raw_entry = entry_candle.close
         slippage = self.config.slippage_ticks * pu
+        exit_slip_t = getattr(self.config, "exit_slippage_ticks", None)
+        if exit_slip_t is None:
+            exit_slip_t = self.config.slippage_ticks
+        exit_slippage = exit_slip_t * pu
+
         if direction == OrderDirection.LONG:
             entry_price = round(raw_entry + slippage, ps)
         else:
@@ -523,7 +528,7 @@ class BacktestExecutionEngine:
                             break
                         # SL hit
                         elif tick.price <= exact_sl:
-                            exit_price = exact_sl
+                            exit_price = round(exact_sl - exit_slippage, ps) if exit_slippage > 0 else exact_sl
                             exit_reason = ExitReason.TICK_RATCHET_SL if ratchet_tightened else ExitReason.STOP_LOSS_HIT
                             exit_time_sec = tick.timestamp_ms / 1000.0
                             hit_via_ticks = True
@@ -538,7 +543,7 @@ class BacktestExecutionEngine:
                             break
                         # SL hit
                         elif tick.price >= exact_sl:
-                            exit_price = exact_sl
+                            exit_price = round(exact_sl + exit_slippage, ps) if exit_slippage > 0 else exact_sl
                             exit_reason = ExitReason.TICK_RATCHET_SL if ratchet_tightened else ExitReason.STOP_LOSS_HIT
                             exit_time_sec = tick.timestamp_ms / 1000.0
                             hit_via_ticks = True
@@ -552,7 +557,7 @@ class BacktestExecutionEngine:
                         if elapsed_sec >= max_hold_s:
                             action = (getattr(self.config, "duration_action", "CLOSE") or "CLOSE").upper()
                             if action == "CLOSE":
-                                exit_price = tick.price
+                                exit_price = round(tick.price - exit_slippage, ps) if direction == OrderDirection.LONG else round(tick.price + exit_slippage, ps)
                                 exit_reason = ExitReason.TIMEOUT_CLOSE
                                 exit_time_sec = tick_time_sec
                                 hit_via_ticks = True
@@ -560,7 +565,7 @@ class BacktestExecutionEngine:
                             elif action == "SCRATCH_OR_MARKET":
                                 u_diff = (tick.price - entry_price) if direction == OrderDirection.LONG else (entry_price - tick.price)
                                 if u_diff >= -1.0 * pu:
-                                    exit_price = tick.price
+                                    exit_price = round(tick.price - exit_slippage, ps) if direction == OrderDirection.LONG else round(tick.price + exit_slippage, ps)
                                     exit_reason = ExitReason.DURATION_SCRATCH
                                     exit_time_sec = tick_time_sec
                                     hit_via_ticks = True
@@ -618,7 +623,7 @@ class BacktestExecutionEngine:
                             exit_candle_idx = idx
                             break
                         elif c.low <= exact_sl:
-                            exit_price = exact_sl
+                            exit_price = round(exact_sl - exit_slippage, ps) if exit_slippage > 0 else exact_sl
                             exit_reason = ExitReason.TICK_RATCHET_SL if ratchet_tightened else ExitReason.STOP_LOSS_HIT
                             exit_time_sec = c.close_time_ms / 1000.0
                             exit_candle_idx = idx
@@ -631,7 +636,7 @@ class BacktestExecutionEngine:
                             exit_candle_idx = idx
                             break
                         elif c.high >= exact_sl:
-                            exit_price = exact_sl
+                            exit_price = round(exact_sl + exit_slippage, ps) if exit_slippage > 0 else exact_sl
                             exit_reason = ExitReason.TICK_RATCHET_SL if ratchet_tightened else ExitReason.STOP_LOSS_HIT
                             exit_time_sec = c.close_time_ms / 1000.0
                             exit_candle_idx = idx
@@ -645,7 +650,7 @@ class BacktestExecutionEngine:
                         if elapsed_sec >= max_hold_s:
                             action = (getattr(self.config, "duration_action", "CLOSE") or "CLOSE").upper()
                             if action == "CLOSE":
-                                exit_price = c.close
+                                exit_price = round(c.close - exit_slippage, ps) if direction == OrderDirection.LONG else round(c.close + exit_slippage, ps)
                                 exit_reason = ExitReason.TIMEOUT_CLOSE
                                 exit_time_sec = c_time_sec
                                 exit_candle_idx = idx
@@ -653,7 +658,7 @@ class BacktestExecutionEngine:
                             elif action == "SCRATCH_OR_MARKET":
                                 u_diff = (c.close - entry_price) if direction == OrderDirection.LONG else (entry_price - c.close)
                                 if u_diff >= -1.0 * pu:
-                                    exit_price = c.close
+                                    exit_price = round(c.close - exit_slippage, ps) if direction == OrderDirection.LONG else round(c.close + exit_slippage, ps)
                                     exit_reason = ExitReason.DURATION_SCRATCH
                                     exit_time_sec = c_time_sec
                                     exit_candle_idx = idx
@@ -671,7 +676,7 @@ class BacktestExecutionEngine:
 
             # If still open at end of data, close at final candle close
             if exit_reason == ExitReason.UNKNOWN:
-                exit_price = all_candles[-1].close
+                exit_price = round(all_candles[-1].close - exit_slippage, ps) if direction == OrderDirection.LONG else round(all_candles[-1].close + exit_slippage, ps)
                 exit_reason = ExitReason.MANUAL_CLOSE
                 exit_time_sec = all_candles[-1].close_time_ms / 1000.0
                 exit_candle_idx = len(all_candles) - 1

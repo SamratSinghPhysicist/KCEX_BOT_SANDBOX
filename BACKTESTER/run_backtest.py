@@ -410,6 +410,7 @@ def main():
     parser.add_argument("--max-trades", type=int, default=0, help="Max trades to execute (0 = unlimited)")
     parser.add_argument("--speed", type=float, default=0.0, help="Simulated real-time playback speed (0 = max batch speed)")
     parser.add_argument("--slippage", type=int, default=0, help="Slippage in ticks")
+    parser.add_argument("--exit-slippage", type=int, default=None, help="Adverse market exit slippage in ticks (defaults to --slippage)")
     # Trade Optimization & Regime Filter Flags
     parser.add_argument("--duration-filter", action="store_true", default=False, help="Enable trade duration monitoring and time-decay exits")
     parser.add_argument("--duration-deep-monitor", type=float, default=60.0, help="Seconds before high-frequency duration monitoring engages (default: 60.0)")
@@ -503,10 +504,13 @@ def main():
         dynamic_atr_enabled = args.dynamic_atr
         dynamic_atr_tp_mult = args.dynamic_atr_tp
         dynamic_atr_sl_mult = args.dynamic_atr_sl
+        exit_slippage_val = args.exit_slippage
 
         if args.filters_json:
             try:
                 fj = json.loads(args.filters_json) if isinstance(args.filters_json, str) else args.filters_json
+                if "exit_slippage_ticks" in fj and fj["exit_slippage_ticks"] is not None:
+                    exit_slippage_val = int(fj["exit_slippage_ticks"])
                 if "duration_filter" in fj: dur_enabled = bool(fj["duration_filter"])
                 if "duration_deep_monitor" in fj: dur_deep = float(fj["duration_deep_monitor"])
                 if "duration_max_hold" in fj: dur_max = float(fj["duration_max_hold"])
@@ -563,6 +567,7 @@ def main():
             use_tick_data=args.use_tick_data,
             playback_speed=args.speed,
             slippage_ticks=args.slippage,
+            exit_slippage_ticks=exit_slippage_val,
             fee_mode=args.fee_mode,
             maker_fee_override=maker_fee,
             taker_fee_override=taker_fee,
